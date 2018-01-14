@@ -19,7 +19,6 @@ use CachetHQ\Cachet\Models\Metric;
 use CachetHQ\Cachet\Models\Schedule;
 use CachetHQ\Cachet\Repositories\Metric\MetricRepository;
 use CachetHQ\Cachet\Services\Dates\DateFactory;
-use Carbon\Carbon;
 use Exception;
 use GrahamCampbell\Binput\Facades\Binput;
 use Illuminate\Routing\Controller;
@@ -27,6 +26,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Response;
 use Illuminate\Support\Facades\View;
+use Jenssegers\Date\Date;
 use McCool\LaravelAutoPresenter\Facades\AutoPresenter;
 
 /**
@@ -45,14 +45,14 @@ class StatusPageController extends AbstractApiController
      */
     public function showIndex()
     {
-        $today = Carbon::now();
-        $startDate = Carbon::now();
+        $today = Date::now();
+        $startDate = Date::now();
 
         // Check if we have another starting date
         if (Binput::has('start_date')) {
             try {
                 // If date provided is valid
-                $oldDate = Carbon::createFromFormat('Y-m-d', Binput::get('start_date'));
+                $oldDate = Date::createFromFormat('Y-m-d', Binput::get('start_date'));
 
                 // If trying to get a future date fallback to today
                 if ($today->gt($oldDate)) {
@@ -63,11 +63,11 @@ class StatusPageController extends AbstractApiController
             }
         }
 
-        $daysToShow = max(0, (int) Config::get('setting.app_incident_days', 0) - 1);
-        $incidentDays = range(0, $daysToShow);
+        $appIncidentDays = (int) Config::get('setting.app_incident_days', 1);
+        $incidentDays = array_pad([], $appIncidentDays, null);
 
         $allIncidents = Incident::where('visible', '>=', (int) !Auth::check())->whereBetween('occurred_at', [
-            $startDate->copy()->subDays($daysToShow)->format('Y-m-d').' 00:00:00',
+            $startDate->copy()->subDays($appIncidentDays)->format('Y-m-d').' 00:00:00',
             $startDate->format('Y-m-d').' 23:59:59',
         ])->orderBy('occurred_at', 'desc')->get()->groupBy(function (Incident $incident) {
             return app(DateFactory::class)->make($incident->occurred_at)->toDateString();
@@ -75,7 +75,7 @@ class StatusPageController extends AbstractApiController
 
         // Add in days that have no incidents
         if (Config::get('setting.only_disrupted_days') === false) {
-            foreach ($incidentDays as $i) {
+            foreach ($incidentDays as $i => $day) {
                 $date = app(DateFactory::class)->make($startDate)->subDays($i);
 
                 if (!isset($allIncidents[$date->toDateString()])) {
@@ -90,12 +90,12 @@ class StatusPageController extends AbstractApiController
         }, SORT_REGULAR, true);
 
         return View::make('index')
-            ->withDaysToShow($daysToShow)
+            ->withDaysToShow($appIncidentDays)
             ->withAllIncidents($allIncidents)
             ->withCanPageForward((bool) $today->gt($startDate))
             ->withCanPageBackward(Incident::where('occurred_at', '<', $startDate->format('Y-m-d'))->count() > 0)
-            ->withPreviousDate($startDate->copy()->subDays($daysToShow)->toDateString())
-            ->withNextDate($startDate->copy()->addDays($daysToShow)->toDateString());
+            ->withPreviousDate($startDate->copy()->subDays($appIncidentDays)->toDateString())
+            ->withNextDate($startDate->copy()->addDays($appIncidentDays)->toDateString());
     }
 
     /**
@@ -131,7 +131,7 @@ class StatusPageController extends AbstractApiController
      */
     public function getMetrics(Metric $metric)
     {
-        $type = Binput::get('filter', 'last_hour');
+        $type = Binput::get('filter', AutoPresenter::decorate($metric)->view_name);
         $metrics = app(MetricRepository::class);
 
         switch ($type) {

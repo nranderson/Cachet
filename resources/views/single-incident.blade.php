@@ -1,5 +1,7 @@
 @extends('layout.master')
 
+@section('title', $incident->name.' | '.$site_title)
+
 @section('bodyClass', 'no-padding')
 
 @section('outer-content')
@@ -18,8 +20,8 @@
 @if($incident->updates)
 <div class="timeline">
     <div class="content-wrapper">
-        @foreach ($incident->updates as $index => $update)
-        <div class="moment {{ $index === 0 ? 'first' : null }}" id="update-{{ $update->id }}">
+        @foreach ($incident->updates as $update)
+        <div class="moment {{ $loop->first ? 'first' : null }}" id="update-{{ $update->id }}">
             <div class="row event clearfix">
                 <div class="col-sm-1">
                     <div class="status-icon status-{{ $update->status }}" data-toggle="tooltip" title="{{ $update->human_status }}" data-placement="left">
@@ -33,7 +35,14 @@
                                 {!! $update->formatted_message !!}
                             </div>
                         </div>
-                        <div class="panel-footer"><small>{{ trans('cachet.incidents.posted', ['timestamp' => $update->created_at_diff]) }}</small></div>
+                        <div class="panel-footer">
+                            <small>
+                                <span data-toggle="tooltip" title="
+                                    {{ trans('cachet.incidents.posted_at', ['timestamp' => $update->created_at_formatted]) }}">
+                                    {{ trans('cachet.incidents.posted', ['timestamp' => $update->created_at_diff]) }}
+                                </span>
+                            </small>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -42,4 +51,8 @@
     </div>
 </div>
 @endif
+@stop
+
+@section('bottom-content')
+@include('partials.footer')
 @stop
